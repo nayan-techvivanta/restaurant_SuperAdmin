@@ -15,11 +15,12 @@ import {
   Alert,
   Snackbar,
 } from "@mui/material";
+import { ImEye, ImEyeBlocked } from "react-icons/im";
 import CloseIcon from "@mui/icons-material/Close";
+import { toast } from "react-toastify";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import axiosInstance from "../../api/axiosInstance";
-
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
@@ -28,7 +29,7 @@ const AddOwnerForm = ({
   isOpen,
   onClose,
   onSubmit,
-  hotelId,
+  restaurantId,
   editingData = null,
   ownerDetails = null,
 }) => {
@@ -41,13 +42,7 @@ const AddOwnerForm = ({
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-
-  // Notification states
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const [showPassword, setShowPassword] = useState(false);
 
   const PRIMARY = "#F5C857";
 
@@ -76,18 +71,6 @@ const AddOwnerForm = ({
     setErrors({});
   };
 
-  const showNotification = (message, severity = "success") => {
-    setSnackbar({
-      open: true,
-      message,
-      severity,
-    });
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
   const handleOwnerChange = (field, value) => {
     setOwner({ ...owner, [field]: value });
     if (errors[field]) setErrors({ ...errors, [field]: "" });
@@ -99,74 +82,58 @@ const AddOwnerForm = ({
       newErrors.first_name = "First name is required";
     if (!owner.last_name.trim()) newErrors.last_name = "Last name is required";
     if (!owner.email.trim()) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(owner.email)) newErrors.email = "Email is invalid";
+    else if (!/\S+@\S+\.\S+/.test(owner.email))
+      newErrors.email = "Email is invalid";
     if (!owner.password && !editingData)
       newErrors.password = "Password is required";
     if (!owner.user_role) newErrors.user_role = "Role is required";
     return newErrors;
   };
 
+
   const createOwner = async () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      return false;
+      toast.error("Please fix form errors");
+      return;
     }
 
-    if (!hotelId) {
-      showNotification("Please create hotel first", "error");
-      return false;
+    if (!restaurantId) {
+      toast.error("Please create restaurant first");
+      return;
     }
 
     setLoading(true);
     try {
-      const ownerPayload = {
-        hotel_id: hotelId,
+      const payload = {
+        restaurant_id: restaurantId,
         first_name: owner.first_name,
         last_name: owner.last_name,
         email: owner.email,
         user_role: owner.user_role,
+        ...(owner.password && { password: owner.password }),
+        ...(editingData?.member_id && { member_id: editingData.member_id }),
       };
 
-      if (owner.password.trim()) {
-        ownerPayload.password = owner.password;
+      const response = await axiosInstance.post("/api/v1/member/add", payload);
+
+      // ✅ ONLY SUCCESS HERE
+      if (response.data?.success || response.status === 200) {
+        toast.success("Member saved successfully!");
+
+        onSubmit?.(response.data.data || payload);
+        handleClose(); // reset + close dialog
+        return;
       }
 
-      let response;
-      if (editingData?.member_id || ownerDetails?.member_id) {
-        const memberId = editingData?.member_id || ownerDetails?.member_id;
-        ownerPayload.member_id = memberId;
-        response = await axiosInstance.put(`/api/v1/member/add`, ownerPayload);
-      } else {
-        response = await axiosInstance.post("/api/v1/member/add", ownerPayload);
-      }
-
-      if (response.data.success) {
-        onSubmit(response.data.data || ownerPayload);
-        showNotification(
-          editingData ? "Owner updated successfully!" : "Owner added successfully!",
-          "success"
-        );
-        setTimeout(() => {
-          resetForm();
-          onClose();
-        }, 1000);
-        return true;
-      } else {
-        showNotification(
-          response.data.message || "Failed to add owner",
-          "error"
-        );
-        return false;
-      }
-    } catch (error) {
-      console.error("Owner creation error:", error);
-      let errorMessage = "Error adding owner. Please try again.";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      }
-      showNotification(errorMessage, "error");
-      return false;
+      // ❌ failure
+      toast.error(response.data?.message || "Failed to save member");
+    } catch (err) {
+      // ❌ ONLY ERROR HERE
+      toast.error(
+        err.response?.data?.message || "Something went wrong. Try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -209,7 +176,8 @@ const AddOwnerForm = ({
               {editingData ? "Edit Owner" : "Add Owner"}
             </Typography>
             <Typography variant="body2" sx={{ color: "#666" }}>
-              Complete owner information for Hotel ID: {hotelId || "N/A"}
+              Complete owner information for Restaurant ID:{" "}
+              {restaurantId || "N/A"}
             </Typography>
           </Box>
           <IconButton
@@ -262,12 +230,28 @@ const AddOwnerForm = ({
                   ? "Password (leave empty to keep current)"
                   : "Password *"
               }
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={owner.password}
               onChange={(e) => handleOwnerChange("password", e.target.value)}
               error={!!errors.password}
               helperText={errors.password}
               disabled={loading}
+              InputProps={{
+                endAdornment: (
+                  <IconButton
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                    disabled={loading}
+                    sx={{ color: "#666" }}
+                  >
+                    {showPassword ? (
+                      <ImEyeBlocked size={18} />
+                    ) : (
+                      <ImEye size={18} />
+                    )}
+                  </IconButton>
+                ),
+              }}
             />
 
             <Autocomplete
@@ -298,7 +282,7 @@ const AddOwnerForm = ({
                   <ArrowForwardIcon />
                 )
               }
-              disabled={loading || !hotelId}
+              disabled={loading || !restaurantId}
               sx={{
                 backgroundColor: PRIMARY,
                 color: "#000",
@@ -315,7 +299,11 @@ const AddOwnerForm = ({
                 },
               }}
             >
-              {loading ? "Processing..." : editingData ? "Update Owner" : "Add Owner"}
+              {loading
+                ? "Processing..."
+                : editingData
+                ? "Update Owner"
+                : "Add Owner"}
             </Button>
           </Box>
         </DialogContent>
@@ -350,21 +338,6 @@ const AddOwnerForm = ({
           </Button>
         </DialogActions>
       </Dialog>
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </>
   );
 };

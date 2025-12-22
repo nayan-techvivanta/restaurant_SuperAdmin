@@ -1,293 +1,727 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  Box,
+  Typography,
+  Button,
+  Grid,
+  Card,
+  CardContent,
+  CircularProgress,
+  Alert,
+  TablePagination,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Collapse,
+  IconButton,
+  FormControlLabel,
+} from "@mui/material";
+import { MdOutlineRestaurant } from "react-icons/md";
+import { styled } from "@mui/material/styles";
 import { motion } from "framer-motion";
-import { Building2, Users, BarChart3, Bell, Plus } from "lucide-react";
-import AddRestaurantForm from "../../components/Dialog/AddRestaurantForm";
-import { IoIosTrash } from "react-icons/io";
-import { BiSolidEdit } from "react-icons/bi";
+
+import Switch from "@mui/material/Switch";
+import {
+  KeyboardArrowDown as KeyboardArrowDownIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Add as AddIcon,
+} from "@mui/icons-material";
+import { toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import axiosInstance from "../../api/axiosInstance";
+import AddRestaurantForm from "../../components/Dialog/AddRestaurantForm";
+import AddOwnerForm from "../../components/Dialog/AddOwnerForm";
+
+const YellowSwitch = styled(Switch)(({ theme }) => ({
+  "& .MuiSwitch-switchBase.Mui-checked": {
+    color: "#facc15",
+  },
+  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+    backgroundColor: "#facc15",
+  },
+}));
 
 const Dashboard = () => {
   const [isAddRestaurantOpen, setIsAddRestaurantOpen] = useState(false);
-  const [recentRestaurants, setRecentRestaurants] = useState([]);
+  const [isAddOwnerOpen, setIsAddOwnerOpen] = useState(false);
   const [editingRestaurant, setEditingRestaurant] = useState(null);
-  const [ownerDetails, setOwnerDetails] = useState(null);
+  const [currentRestaurantId, setCurrentRestaurantId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState([
     {
       label: "Total Restaurants",
       value: "0",
       change: "+12%",
-      icon: <Building2 size={24} />,
-      color: "bg-blue-500",
+      color: "#3b82f6",
     },
-    {
-      label: "Active Users",
-      value: "1,234",
-      change: "+8%",
-      icon: <Users size={24} />,
-      color: "bg-green-500",
-    },
-    {
-      label: "Revenue",
-      value: "$45.2K",
-      change: "+23%",
-      icon: <BarChart3 size={24} />,
-      color: "bg-purple-500",
-    },
-    {
-      label: "Pending Requests",
-      value: "5",
-      change: "-2",
-      icon: <Bell size={24} />,
-      color: "bg-[#F5C857]",
-    },
+    { label: "Active Users", value: "1,234", change: "+8%", color: "#10b981" },
+    { label: "Revenue", value: "$45.2K", change: "+23%", color: "#8b5cf6" },
+    { label: "Pending Requests", value: "5", change: "-2", color: "#f59e0b" },
   ]);
-  useEffect(() => {
-    fetchRestaurants();
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [recentRestaurants, setRecentRestaurants] = useState([]);
+
+  const [openRows, setOpenRows] = useState({});
+  const [rowDetails, setRowDetails] = useState({});
+  const [rowLoading, setRowLoading] = useState({});
+
+  const fetchRestaurants = useCallback(
+    async (currentPage = page, rows = rowsPerPage) => {
+      try {
+        setLoading(true);
+        const response = await axiosInstance.get("/api/v1/restaurant/all", {
+          params: {
+            limit: rows,
+            page: currentPage + 1,
+            search: "",
+          },
+        });
+
+        if (response.data?.data) {
+          setRecentRestaurants(response.data.data);
+          setTotalCount(response.data.total || response.data.data.length);
+          setStats((prev) =>
+            prev.map((stat, idx) =>
+              idx === 0
+                ? {
+                    ...stat,
+                    value: (
+                      response.data.total || response.data.data.length
+                    ).toString(),
+                  }
+                : stat
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching restaurants:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [page, rowsPerPage]
+  );
+
+  // const fetchRestaurantDetails = useCallback(async (restaurantId) => {
+  //   try {
+  //     setRowLoading(true);
+  //     const response = await axiosInstance.get(
+  //       `/api/v1/restaurant/${restaurantId}`
+  //     );
+
+  //     if (response.data?.success) {
+  //       setRowDetails(response.data);
+  //       setExpandedRow(restaurantId);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error fetching restaurant details:", error);
+  //     toast.error("Failed to load restaurant details");
+  //   } finally {
+  //     setRowLoading(false);
+  //   }
+  // }, []);
+  const fetchRestaurantDetails = useCallback(async (restaurantId) => {
+    try {
+      setRowLoading((prev) => ({ ...prev, [restaurantId]: true }));
+      const response = await axiosInstance.get(
+        `/api/v1/restaurant/${restaurantId}`
+      );
+
+      if (response.data?.success) {
+        setRowDetails((prev) => ({ ...prev, [restaurantId]: response.data }));
+      }
+    } catch (error) {
+      console.error("Error fetching restaurant details:", error);
+      toast.error("Failed to load restaurant details");
+    } finally {
+      setRowLoading((prev) => ({ ...prev, [restaurantId]: false }));
+    }
   }, []);
 
-  const fetchRestaurants = async () => {
-    try {
-      setLoading(true);
+  useEffect(() => {
+    fetchRestaurants();
+  }, [fetchRestaurants]);
 
-      const response = await axiosInstance.get("/api/v1/restaurant/all", {
-        params: {
-          limit: 100,
-          page: 1,
-          search: "",
-        },
-      });
-
-      if (response.data?.data) {
-        const restaurants = response.data.data;
-        setRecentRestaurants(restaurants);
-
-        // Update stats with the actual restaurant count
-        setStats((prev) =>
-          prev.map((stat, idx) =>
-            idx === 0 ? { ...stat, value: restaurants.length.toString() } : stat
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching restaurants:", error);
-      alert("Failed to fetch restaurants");
-    } finally {
-      setLoading(false);
-    }
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+    fetchRestaurants(newPage, rowsPerPage);
   };
 
-  const handleAddOrUpdateRestaurant = async (restaurantData) => {
-    try {
-      if (editingRestaurant) {
-        await axiosInstance.put(`/api/v1/restaurant/${editingRestaurant.id}`, {
-          ...restaurantData,
-          owner: ownerDetails || null,
-        });
-        setEditingRestaurant(null);
-        setOwnerDetails(null);
-      } else {
-        await axiosInstance.post("/api/v1/restaurant/add", {
-          name: restaurantData.name,
-          address: restaurantData.address,
-          city: restaurantData.city,
-          state: restaurantData.state,
-          // Add owner details if available
-          owner: restaurantData.owner || null,
-        });
-        setOwnerDetails(null);
-      }
+  const handleChangeRowsPerPage = (event) => {
+    const newRowsPerPage = parseInt(event.target.value, 10);
+    setRowsPerPage(newRowsPerPage);
+    setPage(0);
+    fetchRestaurants(0, newRowsPerPage);
+  };
 
-      // Refresh the restaurant list
-      fetchRestaurants();
-      setIsAddRestaurantOpen(false);
-    } catch (error) {
-      console.error("Error saving restaurant:", error);
-      alert("Failed to save restaurant");
-    }
+  const handleAddOrUpdateRestaurant = (restaurantData) => {
+    fetchRestaurants(page, rowsPerPage);
+    setEditingRestaurant(null);
+    setIsAddRestaurantOpen(false);
   };
 
   const handleDeleteRestaurant = async (id) => {
     if (window.confirm("Are you sure you want to delete this restaurant?")) {
       try {
         await axiosInstance.delete(`/api/v1/restaurant/${id}`);
-
-        fetchRestaurants();
+        fetchRestaurants(page, rowsPerPage);
+        toast.success("Restaurant deleted successfully!");
       } catch (error) {
         console.error("Error deleting restaurant:", error);
-        alert("Failed to delete restaurant");
+        toast.error("Failed to delete restaurant");
       }
     }
   };
 
-  return (
-    <div className="p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-            Dashboard Overview
-          </h1>
-          <p className="text-gray-500 mt-1 md:mt-2 text-sm md:text-base">
-            Welcome back, Super Admin ! Here's what's happening.
-          </p>
-        </div>
+  const handleAddUser = (restaurantId) => {
+    setCurrentRestaurantId(restaurantId);
+    setIsAddOwnerOpen(true);
+  };
 
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setIsAddRestaurantOpen(true)}
-          className="mt-4 md:mt-0 px-4 md:px-6 py-2 md:py-3 bg-[#F5C857] text-white rounded-lg cursor-pointer hover:bg-yellow-500 transition-colors font-medium flex items-center text-sm md:text-base"
+  const handleOwnerAdded = (newMemberData) => {
+    Object.keys(openRows).forEach((restaurantId) => {
+      if (openRows[restaurantId]) {
+        fetchRestaurantDetails(restaurantId);
+      }
+    });
+    fetchRestaurants(page, rowsPerPage);
+
+    setCurrentRestaurantId(null);
+  };
+
+  const handleStatusToggle = async (restaurantId, currentStatus) => {
+    try {
+      const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+
+      await axiosInstance.put("/api/v1/restaurant/status", {
+        id: restaurantId,
+        status: newStatus,
+      });
+
+      toast.success(`Restaurant ${newStatus} successfully!`);
+
+      fetchRestaurants(page, rowsPerPage);
+
+      if (openRows[restaurantId]) {
+        fetchRestaurantDetails(restaurantId);
+      }
+    } catch (error) {
+      console.error("Status update error:", error);
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleToggleRow = (restaurantId) => {
+    const isCurrentlyOpen = openRows[restaurantId];
+
+    if (isCurrentlyOpen) {
+      setOpenRows((prev) => ({ ...prev, [restaurantId]: false }));
+      setRowDetails((prev) => {
+        const newDetails = { ...prev };
+        delete newDetails[restaurantId];
+        return newDetails;
+      });
+    } else {
+      setOpenRows((prev) => ({ ...prev, [restaurantId]: true }));
+      fetchRestaurantDetails(restaurantId);
+    }
+  };
+
+  function Row({ row }) {
+    const isExpanded = openRows[row.id];
+    const restaurantDetails = rowDetails[row.id];
+    const restaurantUsers = restaurantDetails?.users || [];
+    const hasUsers = restaurantUsers.length > 0;
+    const currentStatus =
+      restaurantDetails?.restaurant?.status || row.status || "INACTIVE";
+    const isRowLoading = rowLoading[row.id];
+    const isRowDisabled = currentStatus === "INACTIVE";
+    return (
+      <React.Fragment>
+        {/* <TableRow sx={{ "& > *": { borderBottom: "unset" } }}> */}
+        <TableRow
+          sx={{
+            "& > *": { borderBottom: "unset" },
+
+            opacity: isRowDisabled ? 0.5 : 1,
+            backgroundColor: isRowDisabled ? "rgba(0,0,0,0.03)" : "inherit",
+          }}
         >
-          <Plus size={18} className="mr-2" />
-          Add New Restaurant
-        </motion.button>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex justify-between items-start ">
-              <div>
-                <p className="text-gray-500 text-xs md:text-sm ">
-                  {stat.label}
-                </p>
-                <p className="text-xl md:text-2xl font-bold text-gray-800 mt-1 md:mt-2 ">
-                  {stat.value}
-                </p>
-                <p
-                  className={`text-xs md:text-sm mt-1 ${
-                    stat.change.startsWith("+")
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }`}
+          <TableCell>
+            <IconButton
+              aria-label="expand row"
+              size="small"
+              onClick={() => handleToggleRow(row.id)}
+              // disabled={isRowLoading}
+              disabled={isRowLoading || isRowDisabled}
+            >
+              {isExpanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+            </IconButton>
+          </TableCell>
+          <TableCell component="th" scope="row">
+            {row.name}
+          </TableCell>
+          <TableCell align="right">{row.city}</TableCell>
+          <TableCell align="right">{row.state}</TableCell>
+          <TableCell align="right">
+            {row.created_at
+              ? new Date(row.created_at).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : "N/A"}
+          </TableCell>
+          <TableCell align="center">
+            <FormControlLabel
+              control={
+                <YellowSwitch
+                  checked={currentStatus === "ACTIVE"}
+                  onChange={(e) => handleStatusToggle(row.id, currentStatus)}
+                  size="small"
+                  disabled={false}
+                />
+              }
+              label={
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 500,
+                    color: currentStatus === "ACTIVE" ? "#facc15" : "#9ca3af",
+                  }}
                 >
-                  {stat.change} from last month
-                </p>
-              </div>
-              <div className={`${stat.color} p-2 md:p-3 rounded-lg text-white`}>
-                {stat.icon}
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+                  {currentStatus === "ACTIVE" ? "Active" : "Inactive"}
+                </span>
+              }
+              sx={{
+                m: 0,
+                minWidth: 110,
+                "& .MuiFormControlLabel-label": {
+                  marginLeft: 0.5,
+                },
+              }}
+            />
+          </TableCell>
+          <TableCell align="right">
+            <IconButton
+              color="primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingRestaurant(row);
+                setIsAddRestaurantOpen(true);
+              }}
+              disabled={isRowDisabled}
+              size="small"
+            >
+              <EditIcon />
+            </IconButton>
+            <IconButton
+              color="error"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteRestaurant(row.id);
+              }}
+              disabled={isRowDisabled}
+              size="small"
+            >
+              <DeleteIcon />
+            </IconButton>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
+            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+              <Box sx={{ margin: 1 }}>
+                {isRowLoading ? (
+                  <Box display="flex" justifyContent="center" p={2}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : (
+                  <>
+                    <Typography variant="h6" gutterBottom>
+                      Restaurant Details & Users
+                    </Typography>
 
-    
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Recently Added Restaurants</h2>
-          {loading && <div className="text-sm text-gray-500">Loading...</div>}
-        </div>
-
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F5C857] mx-auto"></div>
-            <p className="mt-2 text-gray-500">Loading restaurants...</p>
-          </div>
-        ) : recentRestaurants.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No restaurants found. Add your first restaurant!
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-2">Name</th>
-                  <th className="text-left py-3 px-2">City</th>
-                  <th className="text-left py-3 px-2">State</th>
-                  <th className="text-left py-3 px-2">Added</th>
-                  <th className="text-left py-3 px-2">Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {recentRestaurants.map((r, i) => (
-                  <React.Fragment key={r.id || i}>
-                    {/* Restaurant Row */}
-                    <tr className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-2 font-medium">{r.name}</td>
-                      <td className="py-3 px-2">{r.city}</td>
-                      <td className="py-3 px-2">{r.state}</td>
-                      <td className="py-3 px-2 text-gray-500">
-                        {r.created_at
-                          ? new Date(r.created_at).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "N/A"}
-                      </td>
-
-                      <td className="py-3 px-2 flex gap-3">
-                        <button
-                          className="text-blue-600 hover:text-blue-800"
-                          onClick={() => {
-                            setEditingRestaurant(r);
-                            setOwnerDetails(r.owner || null);
-                            setIsAddRestaurantOpen(true);
+                    <Box
+                      sx={{ mb: 3, p: 2, bgcolor: "#f5f5f5", borderRadius: 1 }}
+                    >
+                      <Typography
+                        variant="body1"
+                        fontWeight="bold"
+                        sx={{ mb: 1 }}
+                      >
+                        {restaurantDetails?.restaurant?.name || row.name}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Address:</strong>{" "}
+                        {restaurantDetails?.restaurant?.address ||
+                          row.address ||
+                          "N/A"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Status:</strong>
+                        <Box
+                          component="span"
+                          sx={{
+                            ml: 1,
+                            px: 2,
+                            py: 0.5,
+                            borderRadius: 1,
+                            fontSize: "0.75rem",
+                            fontWeight: "bold",
+                            bgcolor:
+                              restaurantDetails?.restaurant?.status === "ACTIVE"
+                                ? "#d4edda"
+                                : "#f8d7da",
+                            color:
+                              restaurantDetails?.restaurant?.status === "ACTIVE"
+                                ? "#155724"
+                                : "#721c24",
                           }}
                         >
-                          <BiSolidEdit size={25} />
-                        </button>
+                          {restaurantDetails?.restaurant?.status || "N/A"}
+                        </Box>
+                      </Typography>
+                    </Box>
 
-                        <button
-                          className="text-red-600 hover:text-red-800"
-                          onClick={() => handleDeleteRestaurant(r.id)}
-                        >
-                          <IoIosTrash size={25} />
-                        </button>
-                      </td>
-                    </tr>
+                    <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                      Users ({restaurantUsers.length})
+                    </Typography>
 
-                    {/* Owner Row (Only if owner exists) */}
-                    {r.owner && (
-                      <tr className=" border-b">
-                        <td
-                          colSpan="4"
-                          className="py-3 px-4 text-sm text-gray-700"
-                        >
-                          <div className="font-semibold mb-1">
-                            Owner Details:
-                          </div>
-                          <div className="flex flex-col md:flex-row md:gap-6 text-gray-600">
-                            <p>
-                              <strong>Name:</strong> {r.owner.first_name}{" "}
-                              {r.owner.last_name}
-                            </p>
-                            <p>
-                              <strong>Email:</strong> {r.owner.email}
-                            </p>
-                            <p>
-                              <strong>Password:</strong> {r.owner.password}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
+                    {hasUsers ? (
+                      <Box sx={{ maxHeight: 250, overflow: "auto", mb: 2 }}>
+                        {restaurantUsers.map((user, index) => (
+                          <Box
+                            key={user.link_id || user.user_id || index}
+                            sx={{
+                              p: 2,
+                              mb: 1.5,
+                              border: "1px solid #e0e0e0",
+                              borderRadius: 2,
+                              bgcolor: index % 2 === 0 ? "#f8f9fa" : "white",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                mb: 0.5,
+                              }}
+                            >
+                              <Typography variant="body1" fontWeight="bold">
+                                {user.first_name} {user.last_name}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  px: 1.5,
+                                  py: 0.5,
+                                  borderRadius: 1,
+                                  bgcolor: "primary.main",
+                                  color: "white",
+                                  fontWeight: "bold",
+                                  fontSize: "0.7rem",
+                                }}
+                              >
+                                {user.role}
+                              </Typography>
+                            </Box>
+                            <Typography variant="body2" color="text.secondary">
+                              {user.email}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    ) : (
+                      <Alert severity="info" sx={{ mb: 3 }}>
+                        No users assigned to this restaurant yet.
+                      </Alert>
                     )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
-      {/* Add Restaurant Modal */}
+
+                    <Box sx={{ textAlign: "center", pt: 2, pb: 1 }}>
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={() => handleAddUser(row.id)}
+                        size="large"
+                        sx={{
+                          backgroundColor: "#F5C857",
+                          color: "#000",
+                          fontWeight: "bold",
+                          borderRadius: "10px",
+                          textTransform: "none",
+                          px: 4,
+                          py: 1,
+                          "&:hover": {
+                            backgroundColor: "#eab308",
+                            boxShadow: "0 4px 12px rgba(245, 200, 87, 0.4)",
+                          },
+                        }}
+                      >
+                        {hasUsers ? "Add More Users" : "Add First User"}
+                      </Button>
+                    </Box>
+                  </>
+                )}
+              </Box>
+            </Collapse>
+          </TableCell>
+        </TableRow>
+      </React.Fragment>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 4,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Dashboard Overview
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Welcome back, Super Admin! Here's what's happening.
+          </Typography>
+        </Box>
+        <motion.button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingRestaurant(null);
+            setIsAddRestaurantOpen(true);
+          }}
+          className="mt-4 md:mt-0 px-4 md:px-6 py-2 md:py-3 bg-[#F5C857] text-white rounded-lg cursor-pointer hover:bg-yellow-500 transition-colors font-medium flex items-center text-sm md:text-base"
+        >
+          Add New Restaurant
+        </motion.button>
+      </Box>
+
+      {/* Stats Grid */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {stats.map((stat, index) => (
+          <Grid item xs={12} sm={6} lg={3} key={stat.label}>
+            <Card>
+              <CardContent>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      {stat.label}
+                    </Typography>
+                    <Typography variant="h4" component="div" sx={{ mb: 1 }}>
+                      {stat.value}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: stat.change.startsWith("+")
+                          ? "success.main"
+                          : "error.main",
+                      }}
+                    >
+                      {stat.change} from last month
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      bgcolor: stat.color,
+                      p: 2,
+                      borderRadius: 1,
+                      minWidth: 48,
+                      height: 48,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Typography
+                      color="white"
+                      fontWeight="bold"
+                      fontSize="1.2rem"
+                    >
+                      {stat.label.includes("Restaurants") ? "🏢" : "📊"}
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Table */}
+      <Card>
+        <CardContent>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 3,
+            }}
+          >
+            <Typography variant="h6">Restaurants ({totalCount})</Typography>
+            {loading && <CircularProgress size={24} />}
+          </Box>
+
+          {loading ? (
+            <Box display="flex" justifyContent="center" p={4}>
+              <CircularProgress />
+            </Box>
+          ) : recentRestaurants.length === 0 ? (
+            <Alert severity="info">
+              No restaurants found. Add your first restaurant!
+            </Alert>
+          ) : (
+            <>
+              <Paper sx={{ width: "100%", mb: 2, overflow: "hidden" }}>
+                <TableContainer>
+                  <Table aria-label="collapsible restaurant table">
+                    <TableHead
+                      sx={{
+                        backgroundColor: "#1E293B",
+                      }}
+                    >
+                      <TableRow>
+                        <TableCell
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            fontSize: "26px",
+                            borderBottom: "none",
+                          }}
+                        >
+                          <MdOutlineRestaurant />
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                        >
+                          Restaurant Name
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                        >
+                          City
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                        >
+                          State
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                          align="right"
+                        >
+                          Added
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                          align="center"
+                        >
+                          Status
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            color: "#fff",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "none",
+                          }}
+                          align="right"
+                        >
+                          Actions
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {recentRestaurants.map((row) => (
+                        <Row key={row.id || row.name} row={row} />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+
+              <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+                <TablePagination
+                  rowsPerPageOptions={[5, 10, 25]}
+                  component="div"
+                  count={totalCount}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  labelRowsPerPage="Restaurants per page:"
+                />
+              </Box>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ✅ Forms */}
       <AddRestaurantForm
         isOpen={isAddRestaurantOpen}
         onClose={() => {
@@ -296,10 +730,21 @@ const Dashboard = () => {
         }}
         onSubmit={handleAddOrUpdateRestaurant}
         editingData={editingRestaurant}
-        ownerDetails={ownerDetails}
-        setOwnerDetails={setOwnerDetails}
       />
-    </div>
+
+      {/* ✅ AddOwnerForm - NEW */}
+      <AddOwnerForm
+        isOpen={isAddOwnerOpen}
+        onClose={() => {
+          setIsAddOwnerOpen(false);
+          setCurrentRestaurantId(null);
+        }}
+        onSubmit={handleOwnerAdded}
+        restaurantId={currentRestaurantId}
+        editingData={null}
+        key={currentRestaurantId}
+      />
+    </Box>
   );
 };
 
