@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Filter, MoreVertical } from "lucide-react";
+import { Plus, Search, Filter } from "lucide-react";
+import { toast } from "react-toastify";
 import AddRestaurantForm from "../../components/Dialog/AddRestaurantForm";
 import { IoIosTrash } from "react-icons/io";
-import { Collapse, IconButton } from "@mui/material";
+import { Collapse } from "@mui/material";
 import {
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
 } from "@mui/icons-material";
-
 import { BiSolidEdit } from "react-icons/bi";
 import { FaEye } from "react-icons/fa";
-import { FcShop } from "react-icons/fc";
 import axiosInstance from "../../api/axiosInstance";
 
 const Restaurants = () => {
@@ -31,11 +30,7 @@ const Restaurants = () => {
   const [rowDetails, setRowDetails] = useState({});
   const [rowLoading, setRowLoading] = useState({});
 
-  useEffect(() => {
-    fetchRestaurants();
-  }, [currentPage, statusFilter]);
-
-  const fetchRestaurants = async () => {
+  const fetchRestaurants = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get("/api/v1/restaurant/all", {
@@ -49,144 +44,109 @@ const Restaurants = () => {
 
       if (response.data?.data) {
         setRestaurants(response.data.data);
-
         if (response.data.pagination) {
           setTotalPages(response.data.pagination.totalPages || 1);
         }
       }
     } catch (error) {
       console.error("Error fetching restaurants:", error);
+      toast.error("Failed to load restaurants");
     } finally {
       setLoading(false);
     }
-  };
-  const fetchRestaurantDetails = async (restaurantId) => {
-    try {
+  }, [currentPage, searchTerm, statusFilter]);
+
+  const fetchRestaurantDetails = useCallback(
+    async (restaurantId) => {
+      if (rowDetails[restaurantId]) return;
+
       setRowLoading((prev) => ({ ...prev, [restaurantId]: true }));
-      const response = await axiosInstance.get(
-        `/api/v1/restaurant/${restaurantId}`
-      );
-
-      if (response.data?.success) {
-        setRowDetails((prev) => ({ ...prev, [restaurantId]: response.data }));
+      try {
+        const response = await axiosInstance.get(
+          `/api/v1/restaurant/${restaurantId}`
+        );
+        if (response.data?.success) {
+          setRowDetails((prev) => ({ ...prev, [restaurantId]: response.data }));
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant details:", error);
+        toast.error("Failed to load restaurant details");
+      } finally {
+        setRowLoading((prev) => ({ ...prev, [restaurantId]: false }));
       }
-    } catch (error) {
-      console.error("Error fetching restaurant details:", error);
-    } finally {
-      setRowLoading((prev) => ({ ...prev, [restaurantId]: false }));
-    }
-  };
+    },
+    [rowDetails]
+  );
 
+  // Search debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchTerm !== "") {
-        fetchRestaurants();
-      }
+      setCurrentPage(1);
+      fetchRestaurants();
     }, 500);
-
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  const handleToggleRow = (restaurantId) => {
-    const isCurrentlyOpen = openRows[restaurantId];
 
-    if (isCurrentlyOpen) {
-      setOpenRows((prev) => ({ ...prev, [restaurantId]: false }));
-      setRowDetails((prev) => {
-        const newDetails = { ...prev };
-        delete newDetails[restaurantId];
-        return newDetails;
-      });
-    } else {
-      setOpenRows((prev) => ({ ...prev, [restaurantId]: true }));
-      fetchRestaurantDetails(restaurantId);
-    }
-  };
+  useEffect(() => {
+    fetchRestaurants();
+  }, [currentPage, statusFilter]);
 
-  // const handleAddOrUpdateRestaurant = async (restaurantData) => {
-  //   try {
-  //     if (editingRestaurant) {
-  //       await axiosInstance.put(`/api/v1/restaurant/${editingRestaurant.id}`, {
-  //         ...restaurantData,
-  //         owner: ownerDetails || null,
-  //       });
-  //       setEditingRestaurant(null);
-  //       setOwnerDetails(null);
-  //     } else {
-  //       await axiosInstance.post("/api/v1/restaurant/add", {
-  //         name: restaurantData.name,
-  //         address: restaurantData.address,
-  //         city: restaurantData.city,
-  //         state: restaurantData.state,
-  //         country: restaurantData.country || "India",
-  //         owner: restaurantData.owner || null,
-  //       });
-  //       setOwnerDetails(null);
-  //     }
-
-  //     fetchRestaurants();
-  //     setIsAddRestaurantOpen(false);
-  //   } catch (error) {
-  //     console.error("Error saving restaurant:", error);
-  //     alert("Failed to save restaurant");
-  //   }
-  // };
-  const handleAddOrUpdateRestaurant = async (restaurantData) => {
-    try {
-      if (editingRestaurant) {
-        await axiosInstance.put(`/api/v1/restaurant/${editingRestaurant.id}`, {
-          ...restaurantData,
-          owner: ownerDetails || null,
+  const handleToggleRow = useCallback(
+    (restaurantId) => {
+      const isCurrentlyOpen = openRows[restaurantId];
+      if (isCurrentlyOpen) {
+        setOpenRows((prev) => ({ ...prev, [restaurantId]: false }));
+        setRowDetails((prev) => {
+          const newDetails = { ...prev };
+          delete newDetails[restaurantId];
+          return newDetails;
         });
-        fetchRestaurants();
-        setIsAddRestaurantOpen(false);
-        setEditingRestaurant(null);
-        setOwnerDetails(null);
-        setFormStep(1);
       } else {
-        const res = await axiosInstance.post("/api/v1/restaurant/add", {
-          name: restaurantData.name,
-          address: restaurantData.address,
-          city: restaurantData.city,
-          state: restaurantData.state,
-          country: restaurantData.country || "India",
-        });
-
-        const newId = res.data?.data?.id;
-
-        if (!newId) {
-          throw new Error("Restaurant ID missing in API response");
-        }
-
-        setCreatedRestaurantId(newId);
-
-        setFormStep(2);
+        setOpenRows((prev) => ({ ...prev, [restaurantId]: true }));
+        fetchRestaurantDetails(restaurantId);
       }
-    } catch (error) {
-      console.error("Error:", error);
-      alert(error?.response?.data?.message || "Something went wrong");
-    }
-  };
+    },
+    [openRows, fetchRestaurantDetails]
+  );
 
-  const handleDeleteRestaurant = async (id) => {
-    if (window.confirm("Are you sure you want to delete this restaurant?")) {
-      try {
-        await axiosInstance.delete(`/api/v1/restaurant/${id}`);
-        fetchRestaurants();
-      } catch (error) {
-        console.error("Error deleting restaurant:", error);
-        alert("Failed to delete restaurant");
-      }
-    }
-  };
+  // 🔥 FIXED: Form handles its own API calls, this just refreshes list
+  const handleAddOrUpdateRestaurant = useCallback(() => {
+    // toast.success(
+    //   editingRestaurant
+    //     ? "Restaurant updated successfully!"
+    //     : "Restaurant created successfully! 🎉"
+    // );
+    fetchRestaurants();
+    setIsAddRestaurantOpen(false);
+    setEditingRestaurant(null);
+    setOwnerDetails(null);
+    setFormStep(1);
+    setCreatedRestaurantId(null);
+  }, [editingRestaurant, fetchRestaurants]);
 
-  const toggleOwnerDetails = (id) => {
+  // const handleDeleteRestaurant = useCallback(
+  //   async (id) => {
+  //     if (window.confirm("Are you sure you want to delete this restaurant?")) {
+  //       try {
+  //         await axiosInstance.delete(`/api/v1/restaurant/${id}`);
+  //         toast.success("Restaurant deleted successfully!");
+  //         fetchRestaurants();
+  //       } catch (error) {
+  //         console.error("Error deleting restaurant:", error);
+  //         toast.error("Failed to delete restaurant");
+  //       }
+  //     }
+  //   },
+  //   [fetchRestaurants]
+  // );
+
+  const toggleOwnerDetails = useCallback((id) => {
     setShowOwnerDetails((prev) => ({
       ...prev,
       [id]: !prev[id],
     }));
-  };
+  }, []);
 
-  // Format date helper
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     try {
@@ -201,7 +161,6 @@ const Restaurants = () => {
     }
   };
 
-  // Get status badge color
   const getStatusBadgeColor = (status) => {
     switch (status?.toUpperCase()) {
       case "ACTIVE":
@@ -233,9 +192,11 @@ const Restaurants = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => {
-              setIsAddRestaurantOpen(true);
+              setEditingRestaurant(null);
+              setOwnerDetails(null);
               setFormStep(1);
               setCreatedRestaurantId(null);
+              setIsAddRestaurantOpen(true);
             }}
             className="mt-4 md:mt-0 px-4 md:px-6 py-2 md:py-3 bg-[#F5C857] text-white rounded-lg cursor-pointer hover:bg-yellow-500 transition-colors font-medium flex items-center text-sm md:text-base"
           >
@@ -247,7 +208,6 @@ const Restaurants = () => {
         {/* Search and Filter Bar */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search Input */}
             <div className="flex-1">
               <div className="relative">
                 <Search
@@ -264,13 +224,15 @@ const Restaurants = () => {
               </div>
             </div>
 
-            {/* Status Filter */}
             <div className="flex gap-2">
               <div className="flex items-center gap-2">
                 <Filter size={20} className="text-gray-400" />
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#F5C857]"
                 >
                   <option value="all">All Status</option>
@@ -284,14 +246,13 @@ const Restaurants = () => {
         </div>
       </div>
 
-      {/* Restaurants Table Container - Takes remaining height without scrolling */}
+      {/* Table Container */}
       <div className="flex-1 min-h-0 px-4 md:px-6 pb-4 md:pb-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col"
         >
-          {/* Table Header */}
           <div className="shrink-0 p-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-800">
               All Restaurants ({restaurants.length})
@@ -301,7 +262,6 @@ const Restaurants = () => {
             </div>
           </div>
 
-          {/* Table Body - Scrollable content only */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center h-full">
@@ -366,7 +326,6 @@ const Restaurants = () => {
                     </th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-gray-200">
                   {restaurants.map((restaurant) => {
                     const isExpanded = openRows[restaurant.id];
@@ -382,7 +341,6 @@ const Restaurants = () => {
 
                     return (
                       <React.Fragment key={restaurant.id}>
-                       
                         <tr
                           className={`hover:bg-gray-50 ${
                             isRowDisabled ? "opacity-50 bg-gray-50" : ""
@@ -475,7 +433,7 @@ const Restaurants = () => {
                                 <BiSolidEdit size={25} />
                               </button>
 
-                              <button
+                              {/* <button
                                 onClick={() =>
                                   handleDeleteRestaurant(restaurant.id)
                                 }
@@ -487,12 +445,11 @@ const Restaurants = () => {
                                 } rounded-lg transition-colors`}
                               >
                                 <IoIosTrash size={25} />
-                              </button>
+                              </button> */}
                             </div>
                           </td>
                         </tr>
 
-                        {/* ✅ EXPANDED ROW - Perfect MUI Style */}
                         <tr>
                           <td colSpan="6" className="p-0">
                             <Collapse
@@ -508,8 +465,7 @@ const Restaurants = () => {
                                   </div>
                                 ) : (
                                   <>
-                                    {/* Restaurant Details */}
-                                    <div className="mb-4 p-4 bg-white rounded-lg ">
+                                    <div className="mb-4 p-4 bg-white rounded-lg">
                                       <h4 className="font-medium text-gray-900 mb-2">
                                         Restaurant Details
                                       </h4>
@@ -547,7 +503,6 @@ const Restaurants = () => {
                                       </div>
                                     </div>
 
-                                    {/* Users List */}
                                     <div>
                                       <h4 className="font-medium text-gray-900 mb-3">
                                         Users ({restaurantUsers.length})
@@ -562,7 +517,7 @@ const Restaurants = () => {
                                                   user.user_id ||
                                                   index
                                                 }
-                                                className="p-3  rounded-lg bg-white"
+                                                className="p-3 rounded-lg bg-white"
                                               >
                                                 <div className="flex justify-between items-start mb-1">
                                                   <div className="font-medium text-sm">
@@ -637,19 +592,6 @@ const Restaurants = () => {
         </motion.div>
       </div>
 
-      {/* Add/Edit Restaurant Modal */}
-      {/* <AddRestaurantForm
-        isOpen={isAddRestaurantOpen}
-        onClose={() => {
-          setIsAddRestaurantOpen(false);
-          setEditingRestaurant(null);
-          setOwnerDetails(null);
-        }}
-        onSubmit={handleAddOrUpdateRestaurant}
-        editingData={editingRestaurant}
-        ownerDetails={ownerDetails}
-        setOwnerDetails={setOwnerDetails}
-      /> */}
       <AddRestaurantForm
         isOpen={isAddRestaurantOpen}
         onClose={() => {

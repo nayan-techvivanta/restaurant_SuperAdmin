@@ -100,6 +100,9 @@ export default function SuperAdminLogin() {
       setIsLoading(false);
     }
   };
+  const handleForgotPassword = () => {
+    navigate("/forgot-password");
+  };
 
   return (
     <div
@@ -271,6 +274,21 @@ export default function SuperAdminLogin() {
                 </button>
               </div>
             </motion.div>
+            {/* Forgot Password */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45, duration: 0.4 }}
+              className="text-right"
+            >
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-sm cursor-pointer  text-yellow-400 hover:text-yellow-300 transition-colors duration-200"
+              >
+                Forgot password?
+              </button>
+            </motion.div>
 
             {/* Login Button */}
             <motion.button
@@ -281,7 +299,7 @@ export default function SuperAdminLogin() {
               whileTap={{ scale: isLoading ? 1 : 0.98 }}
               transition={{ delay: 0.5, duration: 0.5 }}
               disabled={isLoading}
-              className={`w-full py-3.5 text-lg font-semibold rounded-xl ${
+              className={`cursor-pointer w-full py-3.5 text-lg font-semibold rounded-xl ${
                 isLoading
                   ? "bg-gray-700 cursor-not-allowed"
                   : "bg-linear-to-r from-yellow-500 to-yellow-600 hover:shadow-lg hover:shadow-yellow-500/30"
