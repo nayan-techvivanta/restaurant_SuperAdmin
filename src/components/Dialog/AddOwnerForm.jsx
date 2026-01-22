@@ -32,13 +32,14 @@ const AddOwnerForm = ({
   restaurantId,
   editingData = null,
   ownerDetails = null,
+  restaurantName
 }) => {
   const [owner, setOwner] = useState({
     first_name: "",
     last_name: "",
     email: "",
     password: "",
-    user_role: "OWNER",
+    user_role: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -53,7 +54,7 @@ const AddOwnerForm = ({
         last_name: ownerDetails.last_name || "",
         email: ownerDetails.email || "",
         password: "",
-        user_role: ownerDetails.user_role || "OWNER",
+        user_role: ownerDetails.user_role || "",
       });
     } else {
       resetForm();
@@ -66,7 +67,7 @@ const AddOwnerForm = ({
       last_name: "",
       email: "",
       password: "",
-      user_role: "OWNER",
+      user_role: "",
     });
     setErrors({});
   };
@@ -173,11 +174,11 @@ const AddOwnerForm = ({
         >
           <Box>
             <Typography variant="h6" fontWeight="bold" sx={{ color: "#333" }}>
-              {editingData ? "Edit Owner" : "Add Owner"}
+              {editingData ? "Edit User" : "Add User"}
             </Typography>
             <Typography variant="body2" sx={{ color: "#666" }}>
-              Complete owner information for Restaurant ID:{" "}
-              {restaurantId || "N/A"}
+              Complete owner information for Restaurant :{" "}
+              {restaurantName || "N/A"}
             </Typography>
           </Box>
           <IconButton
@@ -302,8 +303,8 @@ const AddOwnerForm = ({
               {loading
                 ? "Processing..."
                 : editingData
-                ? "Update Owner"
-                : "Add Owner"}
+                ? "Update"
+                : "Add"}
             </Button>
           </Box>
         </DialogContent>

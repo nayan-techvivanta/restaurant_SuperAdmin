@@ -15,7 +15,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { toast } from "react-toastify"; 
+import { toast } from "react-toastify";
 import { State, City } from "country-state-city";
 import axiosInstance from "../../api/axiosInstance";
 const STATE_CODE_MAP = {
@@ -26,7 +26,7 @@ const STATE_CODE_MAP = {
   Chhattisgarh: "CT",
   Goa: "GA",
   Gujarat: "GJ",
-  Gujrat: "GJ", 
+  Gujrat: "GJ",
   Haryana: "HR",
   "Himachal Pradesh": "HP",
   Jharkhand: "JH",
@@ -76,6 +76,7 @@ const AddRestaurantForm = ({
     state: "",
     state_code: "",
     city: "",
+    restaurent_type: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -120,6 +121,7 @@ const AddRestaurantForm = ({
       state: "",
       state_code: "",
       city: "",
+      type: "",
     });
     setErrors({});
   };
@@ -143,6 +145,7 @@ const AddRestaurantForm = ({
         state: "",
         state_code: "",
         city: "",
+        type: "",
       }));
       setCitiesList([]);
       return;
@@ -153,6 +156,7 @@ const AddRestaurantForm = ({
       state: value.name,
       state_code: value.isoCode,
       city: "",
+      type: "",
     };
     setFormData(newFormData);
     if (errors.state) setErrors({ ...errors, state: "" });
@@ -188,6 +192,7 @@ const AddRestaurantForm = ({
         address: formData.address,
         city: formData.city,
         state: formData.state,
+        type: formData.type,
         ...(formData.state_code && { state_code: formData.state_code }),
       };
 
@@ -362,6 +367,23 @@ const AddRestaurantForm = ({
             />
           </Box>
 
+          <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
+            <Autocomplete
+              fullWidth
+              options={["PREPAID", "POSTPAID", "TABLE"]}
+              value={formData.type}
+              onChange={(_, value) => handleInputChange("type", value)}
+              disabled={loading}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Select Restaurent Type *"
+                  // error={!!errors.restaurent_type}
+                  // helperText={errors.user_role}
+                />
+              )}
+            />
+          </Box>
           <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
             <Button
               onClick={handleSubmit}

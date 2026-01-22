@@ -78,6 +78,7 @@ const Dashboard = () => {
   const [isAddOwnerOpen, setIsAddOwnerOpen] = useState(false);
   const [editingRestaurant, setEditingRestaurant] = useState(null);
   const [currentRestaurantId, setCurrentRestaurantId] = useState(null);
+  const [currentRestaurantName, setCurrentRestaurantName] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Pagination state
@@ -214,8 +215,9 @@ const Dashboard = () => {
     [page, rowsPerPage, debouncedFetchRestaurants]
   );
 
-  const handleAddUser = useCallback((restaurantId) => {
+  const handleAddUser = useCallback((restaurantId,name) => {
     setCurrentRestaurantId(restaurantId);
+    setCurrentRestaurantName(name)
     setIsAddOwnerOpen(true);
   }, []);
 
@@ -228,6 +230,7 @@ const Dashboard = () => {
     });
     debouncedFetchRestaurants(page, rowsPerPage);
     setCurrentRestaurantId(null);
+    setCurrentRestaurantName(null)
   }, [
     openRows,
     page,
@@ -521,7 +524,7 @@ const Dashboard = () => {
                         <Button
                           variant="contained"
                           startIcon={<AddIcon />}
-                          onClick={() => handleAddUser(row.id)}
+                          onClick={() => handleAddUser(row.id,row.name)}
                           size="large"
                           sx={{
                             backgroundColor: "#F5C857",
@@ -537,7 +540,7 @@ const Dashboard = () => {
                             },
                           }}
                         >
-                          {hasUsers ? "Add More Users" : "Add First User"}
+                          Add User
                         </Button>
                       </Box>
                     </>
@@ -813,9 +816,11 @@ const Dashboard = () => {
         onClose={() => {
           setIsAddOwnerOpen(false);
           setCurrentRestaurantId(null);
+          setCurrentRestaurantName(null)
         }}
         onSubmit={handleOwnerAdded}
         restaurantId={currentRestaurantId}
+        restaurantName={currentRestaurantName}
         editingData={null}
         key={currentRestaurantId}
       />
