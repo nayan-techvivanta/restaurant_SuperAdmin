@@ -115,8 +115,8 @@ const Sidebar = ({ isOpen, onClose }) => {
         </nav>
 
         {/* Footer - Fixed at bottom */}
-
-        <div className="p-6 border-t border-gray-200 flex justify-start">
+        <div className="p-6 pt-0 border-t border-gray-200 flex justify-start flex-col">
+          <p className="text-center pb-5">v 1.0.0</p>
           <div className="p-6">
             <button
               onClick={handleLogout}

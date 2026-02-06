@@ -1,829 +1,157 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  Button,
   Grid,
   Card,
   CardContent,
   CircularProgress,
-  Alert,
-  TablePagination,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Collapse,
-  IconButton,
-  FormControlLabel,
 } from "@mui/material";
-import { MdOutlineRestaurant } from "react-icons/md";
-import { styled } from "@mui/material/styles";
-import Switch from "@mui/material/Switch";
-import {
-  KeyboardArrowDown as KeyboardArrowDownIcon,
-  KeyboardArrowUp as KeyboardArrowUpIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-} from "@mui/icons-material";
-import { Plus, Search, Filter, MoreVertical } from "lucide-react";
 import { toast } from "react-toastify";
-import { motion } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 import axiosInstance from "../../api/axiosInstance";
-import AddRestaurantForm from "../../components/Dialog/AddRestaurantForm";
-import AddOwnerForm from "../../components/Dialog/AddOwnerForm";
-
-// Debounce utility
-function useDebounce(callback, delay) {
-  const timeoutRef = React.useRef();
-
-  const debouncedCallback = useCallback(
-    (...args) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = setTimeout(() => callback(...args), delay);
-    },
-    [callback, delay]
-  );
-
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  return debouncedCallback;
-}
-
-const YellowSwitch = styled(Switch)(({ theme }) => ({
-  "& .MuiSwitch-switchBase.Mui-checked": {
-    color: "#facc15",
-  },
-  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-    backgroundColor: "#facc15",
-  },
-}));
+import { MdRestaurant, MdManageAccounts, MdRoomService } from "react-icons/md";
+import { FaUsers, FaUserTie } from "react-icons/fa";
+import { GiCook } from "react-icons/gi";
 
 const Dashboard = () => {
-  // Core state
-  const [isAddRestaurantOpen, setIsAddRestaurantOpen] = useState(false);
-  const [isAddOwnerOpen, setIsAddOwnerOpen] = useState(false);
-  const [editingRestaurant, setEditingRestaurant] = useState(null);
-  const [currentRestaurantId, setCurrentRestaurantId] = useState(null);
-  const [currentRestaurantName, setCurrentRestaurantName] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState(null);
 
-  // Pagination state
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
-  const [recentRestaurants, setRecentRestaurants] = useState([]);
-
-  // Row expansion state
-  const [openRows, setOpenRows] = useState({});
-  const [rowDetails, setRowDetails] = useState({});
-  const [rowLoading, setRowLoading] = useState({});
-
-  const initialStats = useMemo(
-    () => [
-      {
-        label: "Total Restaurants",
-        value: "0",
-        change: "+12%",
-        color: "#3b82f6",
-      },
-      {
-        label: "Active Users",
-        value: "1,234",
-        change: "+8%",
-        color: "#10b981",
-      },
-      { label: "Revenue", value: "$45.2K", change: "+23%", color: "#8b5cf6" },
-      { label: "Pending Requests", value: "5", change: "-2", color: "#f59e0b" },
-    ],
-    []
-  );
-
-  const [stats, setStats] = useState(initialStats);
-
-  // Stable fetchRestaurants - FIXED dependencies
-  const fetchRestaurants = useCallback(async (currentPage = 0, rows = 10) => {
-    try {
-      setLoading(true);
-      const response = await axiosInstance.get("/api/v1/restaurant/all", {
-        params: {
-          limit: rows,
-          page: currentPage + 1,
-          search: "",
-        },
-      });
-
-      if (response.data?.data) {
-        setRecentRestaurants(response.data.data);
-        const total = response.data.total || response.data.data.length;
-        setTotalCount(total);
-
-        // Update only Total Restaurants stat
-        setStats((prev) =>
-          prev.map((stat, idx) =>
-            idx === 0 ? { ...stat, value: total.toString() } : stat
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching restaurants:", error);
-      toast.error("Failed to load restaurants");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Debounced fetch for pagination
-  const debouncedFetchRestaurants = useDebounce(fetchRestaurants, 300);
-
-  // Stable fetchRestaurantDetails
-  const fetchRestaurantDetails = useCallback(async (restaurantId) => {
-    if (rowDetails[restaurantId]) return; // Prevent duplicate calls
-
-    setRowLoading((prev) => ({ ...prev, [restaurantId]: true }));
-    try {
-      const response = await axiosInstance.get(
-        `/api/v1/restaurant/${restaurantId}`
-      );
-      if (response.data?.success) {
-        setRowDetails((prev) => ({ ...prev, [restaurantId]: response.data }));
-      }
-    } catch (error) {
-      console.error("Error fetching restaurant details:", error);
-      toast.error("Failed to load restaurant details");
-    } finally {
-      setRowLoading((prev) => ({ ...prev, [restaurantId]: false }));
-    }
-  }, []);
-
-  // Initial load - FIXED useEffect
+  // Fetch admin dashboard data
   useEffect(() => {
-    fetchRestaurants(0, rowsPerPage);
-  }, []);
-
-  const handleChangePage = useCallback(
-    (event, newPage) => {
-      setPage(newPage);
-      debouncedFetchRestaurants(newPage, rowsPerPage);
-    },
-    [rowsPerPage, debouncedFetchRestaurants]
-  );
-
-  const handleChangeRowsPerPage = useCallback(
-    (event) => {
-      const newRowsPerPage = parseInt(event.target.value, 10);
-      setRowsPerPage(newRowsPerPage);
-      setPage(0);
-      debouncedFetchRestaurants(0, newRowsPerPage);
-    },
-    [debouncedFetchRestaurants]
-  );
-
-  // Form handlers
-  const handleAddOrUpdateRestaurant = useCallback(() => {
-    debouncedFetchRestaurants(page, rowsPerPage);
-    setEditingRestaurant(null);
-    setIsAddRestaurantOpen(false);
-  }, [page, rowsPerPage, editingRestaurant, debouncedFetchRestaurants]);
-
-  const handleDeleteRestaurant = useCallback(
-    async (id) => {
-      if (window.confirm("Are you sure you want to delete this restaurant?")) {
-        try {
-          await axiosInstance.delete(`/api/v1/restaurant/${id}`);
-          debouncedFetchRestaurants(page, rowsPerPage);
-          toast.success("Restaurant deleted successfully!");
-        } catch (error) {
-          console.error("Error deleting restaurant:", error);
-          toast.error("Failed to delete restaurant");
-        }
-      }
-    },
-    [page, rowsPerPage, debouncedFetchRestaurants]
-  );
-
-  const handleAddUser = useCallback((restaurantId,name) => {
-    setCurrentRestaurantId(restaurantId);
-    setCurrentRestaurantName(name)
-    setIsAddOwnerOpen(true);
-  }, []);
-
-  const handleOwnerAdded = useCallback(() => {
-    // Refresh only open rows
-    Object.keys(openRows).forEach((restaurantId) => {
-      if (openRows[restaurantId]) {
-        fetchRestaurantDetails(restaurantId);
-      }
-    });
-    debouncedFetchRestaurants(page, rowsPerPage);
-    setCurrentRestaurantId(null);
-    setCurrentRestaurantName(null)
-  }, [
-    openRows,
-    page,
-    rowsPerPage,
-    debouncedFetchRestaurants,
-    fetchRestaurantDetails,
-  ]);
-
-  // Status toggle with optimistic update
-  const handleStatusToggle = useCallback(
-    async (restaurantId, currentStatus) => {
-      const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-
-      // Optimistic update
-      setRecentRestaurants((prev) =>
-        prev.map((r) =>
-          r.id === restaurantId ? { ...r, status: newStatus } : r
-        )
-      );
-
+    const fetchDashboardData = async () => {
       try {
-        await axiosInstance.put("/api/v1/restaurant/status", {
-          id: restaurantId,
-          status: newStatus,
-        });
-        toast.success(`Restaurant ${newStatus}d successfully!`);
-
-        if (openRows[restaurantId]) {
-          fetchRestaurantDetails(restaurantId);
+        setLoading(true);
+        const response = await axiosInstance.get("/api/v1/dashboard/admin");
+        if (response.data?.success) {
+          setDashboardData(response.data.data);
         }
       } catch (error) {
-        // Revert optimistic update
-        setRecentRestaurants((prev) =>
-          prev.map((r) =>
-            r.id === restaurantId ? { ...r, status: currentStatus } : r
-          )
-        );
-        console.error("Status update error:", error);
-        toast.error("Failed to update status");
+        console.error("Error fetching dashboard data:", error);
+        toast.error("Failed to load dashboard data");
+      } finally {
+        setLoading(false);
       }
+    };
+    fetchDashboardData();
+  }, []);
+
+  const stats = [
+    {
+      label: "Total Restaurants",
+      value: dashboardData?.restaurants?.total ?? "—",
+      subLabel: `${dashboardData?.restaurants?.active ?? 0} Active`,
+      color: "#3b82f6",
+      icon: <MdRestaurant size={24} />,
     },
-    [openRows, fetchRestaurantDetails]
-  );
-
-  const handleToggleRow = useCallback(
-    (restaurantId) => {
-      const isCurrentlyOpen = openRows[restaurantId];
-
-      if (isCurrentlyOpen) {
-        setOpenRows((prev) => ({ ...prev, [restaurantId]: false }));
-        setRowDetails((prev) => {
-          const newDetails = { ...prev };
-          delete newDetails[restaurantId];
-          return newDetails;
-        });
-      } else {
-        setOpenRows((prev) => ({ ...prev, [restaurantId]: true }));
-        fetchRestaurantDetails(restaurantId);
-      }
+    {
+      label: "Total Users",
+      value: dashboardData?.users?.total ?? "—",
+      subLabel: "All registered users",
+      color: "#10b981",
+      icon: <FaUsers size={24} />,
     },
-    [openRows, fetchRestaurantDetails]
-  );
-
-  // Memoized Row component
-  const Row = useCallback(
-    ({ row }) => {
-      const isExpanded = openRows[row.id];
-      const restaurantDetails = rowDetails[row.id];
-      const restaurantUsers = restaurantDetails?.users || [];
-      const hasUsers = restaurantUsers.length > 0;
-      const currentStatus =
-        restaurantDetails?.restaurant?.status || row.status || "INACTIVE";
-      const isRowLoading = rowLoading[row.id];
-      const isRowDisabled = currentStatus === "INACTIVE";
-
-      return (
-        <React.Fragment>
-          <TableRow
-            sx={{
-              "& > *": { borderBottom: "unset" },
-              opacity: isRowDisabled ? 0.5 : 1,
-              backgroundColor: isRowDisabled ? "rgba(0,0,0,0.03)" : "inherit",
-            }}
-          >
-            <TableCell>
-              <IconButton
-                aria-label="expand row"
-                size="small"
-                onClick={() => handleToggleRow(row.id)}
-                disabled={isRowLoading || isRowDisabled}
-              >
-                {isExpanded ? (
-                  <KeyboardArrowUpIcon />
-                ) : (
-                  <KeyboardArrowDownIcon />
-                )}
-              </IconButton>
-            </TableCell>
-            <TableCell component="th" scope="row">
-              {row.name}
-            </TableCell>
-            <TableCell align="right">{row.city}</TableCell>
-            <TableCell align="right">{row.state}</TableCell>
-            <TableCell align="right">
-              {row.created_at
-                ? new Date(row.created_at).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })
-                : "N/A"}
-            </TableCell>
-            <TableCell align="center">
-              <FormControlLabel
-                control={
-                  <YellowSwitch
-                    checked={currentStatus === "ACTIVE"}
-                    onChange={(e) => handleStatusToggle(row.id, currentStatus)}
-                    size="small"
-                  />
-                }
-                label={
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 500,
-                      color: currentStatus === "ACTIVE" ? "#facc15" : "#9ca3af",
-                    }}
-                  >
-                    {currentStatus === "ACTIVE" ? "Active" : "Inactive"}
-                  </span>
-                }
-                sx={{
-                  m: 0,
-                  minWidth: 110,
-                  "& .MuiFormControlLabel-label": {
-                    marginLeft: 0.5,
-                  },
-                }}
-              />
-            </TableCell>
-            <TableCell align="right">
-              <IconButton
-                color="primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingRestaurant(row);
-                  setIsAddRestaurantOpen(true);
-                }}
-                disabled={isRowDisabled}
-                size="small"
-              >
-                <EditIcon />
-              </IconButton>
-              {/* <IconButton
-                color="error"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteRestaurant(row.id);
-                }}
-                disabled={isRowDisabled}
-                size="small"
-              >
-                <DeleteIcon />
-              </IconButton> */}
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
-              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                <Box sx={{ margin: 1 }}>
-                  {isRowLoading ? (
-                    <Box display="flex" justifyContent="center" p={2}>
-                      <CircularProgress size={24} />
-                    </Box>
-                  ) : (
-                    <>
-                      <Typography variant="h6" gutterBottom>
-                        Restaurant Details & Users
-                      </Typography>
-
-                      <Box
-                        sx={{
-                          mb: 3,
-                          p: 2,
-                          bgcolor: "#f5f5f5",
-                          borderRadius: 1,
-                        }}
-                      >
-                        <Typography
-                          variant="body1"
-                          fontWeight="bold"
-                          sx={{ mb: 1 }}
-                        >
-                          {restaurantDetails?.restaurant?.name || row.name}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Address:</strong>{" "}
-                          {restaurantDetails?.restaurant?.address ||
-                            row.address ||
-                            "N/A"}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Status:</strong>
-                          <Box
-                            component="span"
-                            sx={{
-                              ml: 1,
-                              px: 2,
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontSize: "0.75rem",
-                              fontWeight: "bold",
-                              bgcolor:
-                                restaurantDetails?.restaurant?.status ===
-                                "ACTIVE"
-                                  ? "#d4edda"
-                                  : "#f8d7da",
-                              color:
-                                restaurantDetails?.restaurant?.status ===
-                                "ACTIVE"
-                                  ? "#155724"
-                                  : "#721c24",
-                            }}
-                          >
-                            {restaurantDetails?.restaurant?.status || "N/A"}
-                          </Box>
-                        </Typography>
-                      </Box>
-
-                      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-                        Users ({restaurantUsers.length})
-                      </Typography>
-
-                      {hasUsers ? (
-                        <Box sx={{ maxHeight: 250, overflow: "auto", mb: 2 }}>
-                          {restaurantUsers.map((user, index) => (
-                            <Box
-                              key={user.link_id || user.user_id || index}
-                              sx={{
-                                p: 2,
-                                mb: 1.5,
-                                border: "1px solid #e0e0e0",
-                                borderRadius: 2,
-                                bgcolor: index % 2 === 0 ? "#f8f9fa" : "white",
-                                boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                              }}
-                            >
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  mb: 0.5,
-                                }}
-                              >
-                                <Typography variant="body1" fontWeight="bold">
-                                  {user.first_name} {user.last_name}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    px: 1.5,
-                                    py: 0.5,
-                                    borderRadius: 1,
-                                    bgcolor: "primary.main",
-                                    color: "white",
-                                    fontWeight: "bold",
-                                    fontSize: "0.7rem",
-                                  }}
-                                >
-                                  {user.role}
-                                </Typography>
-                              </Box>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                {user.email}
-                              </Typography>
-                            </Box>
-                          ))}
-                        </Box>
-                      ) : (
-                        <Alert severity="info" sx={{ mb: 3 }}>
-                          No users assigned to this restaurant yet.
-                        </Alert>
-                      )}
-
-                      <Box sx={{ textAlign: "center", pt: 2, pb: 1 }}>
-                        <Button
-                          variant="contained"
-                          startIcon={<AddIcon />}
-                          onClick={() => handleAddUser(row.id,row.name)}
-                          size="large"
-                          sx={{
-                            backgroundColor: "#F5C857",
-                            color: "#000",
-                            fontWeight: "bold",
-                            borderRadius: "10px",
-                            textTransform: "none",
-                            px: 4,
-                            py: 1,
-                            "&:hover": {
-                              backgroundColor: "#eab308",
-                              boxShadow: "0 4px 12px rgba(245, 200, 87, 0.4)",
-                            },
-                          }}
-                        >
-                          Add User
-                        </Button>
-                      </Box>
-                    </>
-                  )}
-                </Box>
-              </Collapse>
-            </TableCell>
-          </TableRow>
-        </React.Fragment>
-      );
+    {
+      label: "Owners",
+      value: dashboardData?.users?.by_role?.owner ?? "—",
+      subLabel: "Restaurant owners",
+      color: "#8b5cf6",
+      icon: <FaUserTie size={24} />,
     },
-    [
-      openRows,
-      rowDetails,
-      rowLoading,
-      handleToggleRow,
-      handleStatusToggle,
-      handleAddUser,
-      handleDeleteRestaurant,
-    ]
-  );
-
-  const MemoizedRow = useMemo(() => React.memo(Row), [Row]);
+    {
+      label: "Managers",
+      value: dashboardData?.users?.by_role?.manager ?? "—",
+      subLabel: "Restaurant managers",
+      color: "#f59e0b",
+      icon: <MdManageAccounts size={24} />,
+    },
+    {
+      label: "Waiters",
+      value: dashboardData?.users?.by_role?.waiter ?? "—",
+      subLabel: "Service staff",
+      color: "#ec4899",
+      icon: <MdRoomService size={24} />,
+    },
+    {
+      label: "Cooks",
+      value: dashboardData?.users?.by_role?.cook ?? "—",
+      subLabel: "Kitchen staff",
+      color: "#14b8a6",
+      icon: <GiCook size={24} />,
+    },
+  ];
 
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 4,
-        }}
-      >
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Dashboard Overview
-          </Typography>
-          {/* <Typography variant="body1" color="text.secondary">
-            Welcome back, Super Admin! Here's what's happening.
-          </Typography> */}
-        </Box>
-
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setEditingRestaurant(null);
-            setIsAddRestaurantOpen(true);
-          }}
-          className="mt-4 md:mt-0 px-4 md:px-6 py-2 md:py-3 bg-[#F5C857] text-white rounded-lg cursor-pointer hover:bg-yellow-500 transition-colors font-medium flex items-center text-sm md:text-base"
-        >
-          <Plus size={18} className="mr-2" />
-          Add New Restaurant
-        </motion.button>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Dashboard Overview
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Welcome back, Super Admin! Here's what's happening.
+        </Typography>
       </Box>
 
       {/* Stats Grid */}
-      {/* <Grid container spacing={3} sx={{ mb: 4 }}>
-        {stats.map((stat, index) => (
-          <Grid item xs={12} sm={6} lg={3} key={stat.label}>
-            <Card>
-              <CardContent>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      {stat.label}
-                    </Typography>
-                    <Typography variant="h4" component="div" sx={{ mb: 1 }}>
-                      {stat.value}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: stat.change.startsWith("+")
-                          ? "success.main"
-                          : "error.main",
-                      }}
-                    >
-                      {stat.change} from last month
-                    </Typography>
-                  </Box>
+      {loading ? (
+        <Box display="flex" justifyContent="center" p={4}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <div className="flex flex-wrap gap-4">
+          {stats.map((stat, index) => (
+            <div
+              key={stat.label}
+              className="flex-1 min-w-[280px] max-w-[400px]"
+            >
+              <Card sx={{ height: "100%", minHeight: 140 }}>
+                <CardContent sx={{ height: "100%" }}>
                   <Box
                     sx={{
-                      bgcolor: stat.color,
-                      p: 2,
-                      borderRadius: 1,
-                      minWidth: 48,
-                      height: 48,
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
                     }}
                   >
-                    <Typography
-                      color="white"
-                      fontWeight="bold"
-                      fontSize="1.2rem"
+                    <Box>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 1 }}
+                      >
+                        {stat.label}
+                      </Typography>
+                      <Typography variant="h4" component="div" sx={{ mb: 1 }}>
+                        {stat.value}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {stat.subLabel}
+                      </Typography>
+                    </Box>
+                    <Box
+                      sx={{
+                        bgcolor: stat.color,
+                        p: 2,
+                        borderRadius: 1,
+                        minWidth: 48,
+                        height: 48,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                      }}
                     >
-                      {stat.label.includes("Restaurants") ? "🏢" : "📊"}
-                    </Typography>
+                      {stat.icon}
+                    </Box>
                   </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid> */}
-
-      {/* Table Section */}
-      <Card>
-        <CardContent>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 3,
-            }}
-          >
-            <Typography variant="h6">Restaurants ({totalCount})</Typography>
-            {loading && <CircularProgress size={24} />}
-          </Box>
-
-          {loading ? (
-            <Box display="flex" justifyContent="center" p={4}>
-              <CircularProgress />
-            </Box>
-          ) : recentRestaurants.length === 0 ? (
-            <Alert severity="info">
-              No restaurants found. Add your first restaurant!
-            </Alert>
-          ) : (
-            <>
-              <Paper sx={{ width: "100%", mb: 2, overflow: "hidden" }}>
-                <TableContainer>
-                  <Table aria-label="collapsible restaurant table">
-                    <TableHead sx={{ backgroundColor: "#1E293B" }}>
-                      <TableRow>
-                        <TableCell
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            fontSize: "26px",
-                            borderBottom: "none",
-                          }}
-                        >
-                          <MdOutlineRestaurant />
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          Restaurant Name
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          City
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          State
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          Added
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          Status
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            color: "#fff",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "none",
-                          }}
-                        >
-                          Actions
-                        </TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {recentRestaurants.map((row) => (
-                        <MemoizedRow key={row.id || row.name} row={row} />
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-
-              <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
-                <TablePagination
-                  rowsPerPageOptions={[5, 10, 25]}
-                  component="div"
-                  count={totalCount}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                  labelRowsPerPage="Restaurants per page:"
-                />
-              </Box>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Forms */}
-      <AddRestaurantForm
-        isOpen={isAddRestaurantOpen}
-        onClose={() => {
-          setIsAddRestaurantOpen(false);
-          setEditingRestaurant(null);
-        }}
-        onSubmit={handleAddOrUpdateRestaurant}
-        editingData={editingRestaurant}
-      />
-
-      <AddOwnerForm
-        isOpen={isAddOwnerOpen}
-        onClose={() => {
-          setIsAddOwnerOpen(false);
-          setCurrentRestaurantId(null);
-          setCurrentRestaurantName(null)
-        }}
-        onSubmit={handleOwnerAdded}
-        restaurantId={currentRestaurantId}
-        restaurantName={currentRestaurantName}
-        editingData={null}
-        key={currentRestaurantId}
-      />
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
     </Box>
   );
 };

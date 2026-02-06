@@ -3,15 +3,29 @@ import { motion } from "framer-motion";
 import { Plus, Search, Filter } from "lucide-react";
 import { toast } from "react-toastify";
 import AddRestaurantForm from "../../components/Dialog/AddRestaurantForm";
+import AddOwnerForm from "../../components/Dialog/AddOwnerForm";
 import { IoIosTrash } from "react-icons/io";
-import { Collapse } from "@mui/material";
+import { Collapse, FormControlLabel } from "@mui/material";
+import { styled } from "@mui/material/styles";
+import Switch from "@mui/material/Switch";
 import {
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
+  Add as AddIcon,
 } from "@mui/icons-material";
 import { BiSolidEdit } from "react-icons/bi";
 import { FaEye } from "react-icons/fa";
 import axiosInstance from "../../api/axiosInstance";
+
+// Yellow styled switch for status toggle
+const YellowSwitch = styled(Switch)(({ theme }) => ({
+  "& .MuiSwitch-switchBase.Mui-checked": {
+    color: "#facc15",
+  },
+  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+    backgroundColor: "#facc15",
+  },
+}));
 
 const Restaurants = () => {
   const [restaurants, setRestaurants] = useState([]);
@@ -29,6 +43,11 @@ const Restaurants = () => {
   const [openRows, setOpenRows] = useState({});
   const [rowDetails, setRowDetails] = useState({});
   const [rowLoading, setRowLoading] = useState({});
+
+  // Add Owner Form state
+  const [isAddOwnerOpen, setIsAddOwnerOpen] = useState(false);
+  const [currentRestaurantId, setCurrentRestaurantId] = useState(null);
+  const [currentRestaurantName, setCurrentRestaurantName] = useState(null);
 
   const fetchRestaurants = useCallback(async () => {
     try {
@@ -63,7 +82,7 @@ const Restaurants = () => {
       setRowLoading((prev) => ({ ...prev, [restaurantId]: true }));
       try {
         const response = await axiosInstance.get(
-          `/api/v1/restaurant/${restaurantId}`
+          `/api/v1/restaurant/${restaurantId}`,
         );
         if (response.data?.success) {
           setRowDetails((prev) => ({ ...prev, [restaurantId]: response.data }));
@@ -75,7 +94,7 @@ const Restaurants = () => {
         setRowLoading((prev) => ({ ...prev, [restaurantId]: false }));
       }
     },
-    [rowDetails]
+    [rowDetails],
   );
 
   // Search debounce
@@ -106,7 +125,7 @@ const Restaurants = () => {
         fetchRestaurantDetails(restaurantId);
       }
     },
-    [openRows, fetchRestaurantDetails]
+    [openRows, fetchRestaurantDetails],
   );
 
   // 🔥 FIXED: Form handles its own API calls, this just refreshes list
@@ -146,6 +165,64 @@ const Restaurants = () => {
       [id]: !prev[id],
     }));
   }, []);
+
+  // Add User handler
+  const handleAddUser = useCallback((restaurantId, name) => {
+    setCurrentRestaurantId(restaurantId);
+    setCurrentRestaurantName(name);
+    setIsAddOwnerOpen(true);
+  }, []);
+
+  // Owner added handler - refresh data
+  const handleOwnerAdded = useCallback(() => {
+    // Refresh only open rows
+    Object.keys(openRows).forEach((restaurantId) => {
+      if (openRows[restaurantId]) {
+        fetchRestaurantDetails(restaurantId);
+      }
+    });
+    fetchRestaurants();
+    setCurrentRestaurantId(null);
+    setCurrentRestaurantName(null);
+  }, [openRows, fetchRestaurants, fetchRestaurantDetails]);
+
+  // Status toggle with optimistic update
+  const handleStatusToggle = useCallback(
+    async (restaurantId, currentStatus) => {
+      const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+
+      // Optimistic update
+      setRestaurants((prev) =>
+        prev.map((r) =>
+          r.id === restaurantId ? { ...r, status: newStatus } : r,
+        ),
+      );
+
+      try {
+        await axiosInstance.put("/api/v1/restaurant/status", {
+          id: restaurantId,
+          status: newStatus,
+        });
+        toast.success(
+          `Restaurant ${newStatus === "ACTIVE" ? "activated" : "deactivated"} successfully!`,
+        );
+
+        if (openRows[restaurantId]) {
+          fetchRestaurantDetails(restaurantId);
+        }
+      } catch (error) {
+        // Revert optimistic update
+        setRestaurants((prev) =>
+          prev.map((r) =>
+            r.id === restaurantId ? { ...r, status: currentStatus } : r,
+          ),
+        );
+        console.error("Status update error:", error);
+        toast.error("Failed to update status");
+      }
+    },
+    [openRows, fetchRestaurantDetails],
+  );
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -386,13 +463,43 @@ const Restaurants = () => {
                           </td>
 
                           <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(
-                                currentStatus
-                              )}`}
-                            >
-                              {currentStatus}
-                            </span>
+                            <FormControlLabel
+                              control={
+                                <YellowSwitch
+                                  checked={currentStatus === "ACTIVE"}
+                                  onChange={() =>
+                                    handleStatusToggle(
+                                      restaurant.id,
+                                      currentStatus,
+                                    )
+                                  }
+                                  size="small"
+                                />
+                              }
+                              label={
+                                <span
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    fontWeight: 500,
+                                    color:
+                                      currentStatus === "ACTIVE"
+                                        ? "#facc15"
+                                        : "#9ca3af",
+                                  }}
+                                >
+                                  {currentStatus === "ACTIVE"
+                                    ? "Active"
+                                    : "Inactive"}
+                                </span>
+                              }
+                              sx={{
+                                m: 0,
+                                minWidth: 110,
+                                "& .MuiFormControlLabel-label": {
+                                  marginLeft: 0.5,
+                                },
+                              }}
+                            />
                           </td>
 
                           <td className="py-3 px-4 text-gray-600 text-sm">
@@ -494,7 +601,7 @@ const Restaurants = () => {
                                           </p>
                                           <span
                                             className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(
-                                              currentStatus
+                                              currentStatus,
                                             )}`}
                                           >
                                             {currentStatus}
@@ -532,7 +639,7 @@ const Restaurants = () => {
                                                   {user.email}
                                                 </p>
                                               </div>
-                                            )
+                                            ),
                                           )}
                                         </div>
                                       ) : (
@@ -541,6 +648,25 @@ const Restaurants = () => {
                                           yet.
                                         </div>
                                       )}
+
+                                      {/* Add User Button */}
+                                      <div className="mt-4 text-center">
+                                        <button
+                                          onClick={() =>
+                                            handleAddUser(
+                                              restaurant.id,
+                                              restaurant.name,
+                                            )
+                                          }
+                                          className="inline-flex items-center px-4 py-2 bg-[#F5C857] text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors"
+                                        >
+                                          <AddIcon
+                                            className="mr-2"
+                                            style={{ fontSize: 20 }}
+                                          />
+                                          Add User
+                                        </button>
+                                      </div>
                                     </div>
                                   </>
                                 )}
@@ -607,6 +733,20 @@ const Restaurants = () => {
         setOwnerDetails={setOwnerDetails}
         step={formStep}
         restaurantId={createdRestaurantId}
+      />
+
+      <AddOwnerForm
+        isOpen={isAddOwnerOpen}
+        onClose={() => {
+          setIsAddOwnerOpen(false);
+          setCurrentRestaurantId(null);
+          setCurrentRestaurantName(null);
+        }}
+        onSubmit={handleOwnerAdded}
+        restaurantId={currentRestaurantId}
+        restaurantName={currentRestaurantName}
+        editingData={null}
+        key={currentRestaurantId}
       />
     </div>
   );
